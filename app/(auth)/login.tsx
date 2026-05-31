@@ -13,10 +13,9 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useTheme } from '../../hooks/useTheme';
 import type { ColorScheme } from '../../constants/colors';
-import type { User } from '../../types';
 
 export default function LoginScreen() {
-  const setUser = useAuthStore((s) => s.setUser);
+  const { loginWithEmail } = useAuthStore();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -31,20 +30,12 @@ export default function LoginScreen() {
       Alert.alert('Missing fields', 'Please enter your email and password.');
       return;
     }
-
     setLoading(true);
     try {
-      // TODO: replace with real Firebase auth call
-      const mockUser: User = {
-        id: '1',
-        name: email.split('@')[0],
-        email: email.trim().toLowerCase(),
-        vehicles: [],
-      };
-      await setUser(mockUser);
+      await loginWithEmail(email.trim().toLowerCase(), password);
       router.replace('/(auth)/vehicle-setup');
-    } catch {
-      Alert.alert('Login failed', 'Invalid email or password.');
+    } catch (err: any) {
+      Alert.alert('Login failed', err.message ?? 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -183,4 +174,3 @@ function makeStyles(colors: ColorScheme) {
     linkBold: { color: colors.primary, fontWeight: '700' },
   });
 }
-

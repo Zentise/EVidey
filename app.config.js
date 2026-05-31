@@ -12,6 +12,11 @@ module.exports = {
   icon: './assets/icon.png',
   userInterfaceStyle: 'dark',
   scheme: 'evidey',
+  extra: {
+    eas: {
+      projectId: '3d038622-84ab-456f-8719-3b759bddebba',
+    },
+  },
   android: {
     package: 'com.zentise.evidey',
     adaptiveIcon: {
@@ -45,6 +50,14 @@ module.exports = {
       {
         locationAlwaysAndWhenInUsePermission: 'EVidey needs your location to find charging stops along your route.',
         locationWhenInUsePermission: 'EVidey needs your location to find charging stops along your route.',
+      },
+    ],
+    [
+      'expo-notifications',
+      {
+        icon: './assets/icon.png',
+        color: '#00C853',
+        sounds: [],
       },
     ],
   ],

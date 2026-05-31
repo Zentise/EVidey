@@ -7,15 +7,25 @@ import {
   Dimensions,
   Alert,
   Linking,
+  Share,
 } from 'react-native';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { useTripStore } from '../../../store/tripStore';
 import { useAuthStore } from '../../../store/authStore';
 import { useTheme } from '../../../hooks/useTheme';
+import { refreshStationStatuses } from '../../../services/chargingService';
+import {
+  requestNotificationPermissions,
+  scheduleStopApproachNotification,
+  cancelAllTripNotifications,
+  haversineKm,
+} from '../../../services/notificationService';
 import type { ColorScheme } from '../../../constants/colors';
 import type { RouteStop } from '../../../types';
+import { PROXIMITY_ALERT_KM } from '../../../constants/config';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -23,11 +33,18 @@ export default function RouteScreen() {
   const trip = useTripStore((s) => s.currentTrip);
   const savedTrips = useTripStore((s) => s.savedTrips);
   const saveTrip = useTripStore((s) => s.saveTrip);
+  const stationStatuses = useTripStore((s) => s.stationStatuses);
+  const updateStationStatuses = useTripStore((s) => s.updateStationStatuses);
   const user = useAuthStore((s) => s.user);
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [justSaved, setJustSaved] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const locationSubRef = useRef<Location.LocationSubscription | null>(null);
+  const notifiedStops = useRef<Set<string>>(new Set());
+
   const vehicle = user?.vehicles.find((v) => v.id === trip?.vehicleId);
   const isSaved = trip ? savedTrips.some((t) => t.id === trip.id) : false;
 
@@ -69,6 +86,72 @@ export default function RouteScreen() {
       Alert.alert('Cannot open Maps', 'Google Maps does not appear to be installed.')
     );
   }
+
+  async function handleShare() {
+    const t = trip!;
+    const url = `evidey://route?lat1=${t.origin.latitude}&lng1=${t.origin.longitude}&label1=${encodeURIComponent(t.origin.label)}&lat2=${t.destination.latitude}&lng2=${t.destination.longitude}&label2=${encodeURIComponent(t.destination.label)}&vehicleId=${t.vehicleId}`;
+    try {
+      await Share.share({
+        title: `EVidey Trip: ${t.origin.label.split(',')[0]} → ${t.destination.label.split(',')[0]}`,
+        message: `Check out this EV route on EVidey!\n${t.totalDistanceKm} km · ${t.stops.length} charge stop${t.stops.length !== 1 ? 's' : ''}\n\nOpen in EVidey: ${url}`,
+      });
+    } catch {}
+  }
+
+  async function handleRefreshStatus() {
+    if (!trip || trip.stops.length === 0) return;
+    setRefreshing(true);
+    try {
+      const ids = trip.stops.map((s) => s.station.id);
+      const statuses = await refreshStationStatuses(ids);
+      updateStationStatuses(statuses);
+    } catch {}
+    setRefreshing(false);
+  }
+
+  async function handleToggleAlerts() {
+    if (alertsEnabled) {
+      locationSubRef.current?.remove();
+      locationSubRef.current = null;
+      await cancelAllTripNotifications();
+      setAlertsEnabled(false);
+      return;
+    }
+    const granted = await requestNotificationPermissions();
+    if (!granted) {
+      Alert.alert('Permission needed', 'Enable notifications in settings to receive trip alerts.');
+      return;
+    }
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Location needed', 'Enable location to receive proximity alerts.');
+      return;
+    }
+    notifiedStops.current.clear();
+    locationSubRef.current = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, distanceInterval: 500 },
+      (loc) => {
+        if (!trip) return;
+        trip.stops.forEach((stop, i) => {
+          const stationId = stop.station.id;
+          if (notifiedStops.current.has(stationId)) return;
+          const dist = haversineKm(
+            loc.coords.latitude, loc.coords.longitude,
+            stop.station.coordinates.latitude, stop.station.coordinates.longitude
+          );
+          if (dist <= PROXIMITY_ALERT_KM) {
+            notifiedStops.current.add(stationId);
+            scheduleStopApproachNotification(stop, i, dist);
+          }
+        });
+      }
+    );
+    setAlertsEnabled(true);
+    Alert.alert('Trip Alerts ON', `You'll be notified when within ${PROXIMITY_ALERT_KM} km of each charging stop.`);
+  }
+
+  // Clean up location watcher on unmount
+  useEffect(() => () => { locationSubRef.current?.remove(); }, []);
 
   return (
     <View style={styles.container}>
@@ -149,11 +232,35 @@ export default function RouteScreen() {
         </View>
 
         {/* Start Trip button */}
-        <TouchableOpacity style={styles.startBtn} onPress={handleStartTrip}>
-          <Text style={styles.startBtnText}>🗺️  Start Trip in Google Maps</Text>
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={[styles.startBtn, { flex: 1 }]} onPress={handleStartTrip}>
+            <Text style={styles.startBtnText}>🗺️  Start in Google Maps</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+            <Text style={styles.shareBtnText}>↗</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Trip Alerts toggle */}
+        <TouchableOpacity
+          style={[styles.alertsBtn, alertsEnabled && styles.alertsBtnActive]}
+          onPress={handleToggleAlerts}
+        >
+          <Text style={[styles.alertsBtnText, alertsEnabled && styles.alertsBtnTextActive]}>
+            {alertsEnabled ? '🔔 Trip Alerts ON — tap to disable' : '🔔 Enable Trip Alerts'}
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.stopsHeading}>Charging Stops</Text>
+        <View style={styles.stopsHeader}>
+          <Text style={styles.stopsHeading}>Charging Stops</Text>
+          {trip.stops.length > 0 && (
+            <TouchableOpacity onPress={handleRefreshStatus} disabled={refreshing}>
+              <Text style={[styles.refreshBtn, refreshing && { opacity: 0.5 }]}>
+                {refreshing ? '⏳' : '🔄 Refresh'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         <ScrollView style={styles.stopsList} showsVerticalScrollIndicator={false}>
           {trip.stops.length === 0 && (
@@ -170,6 +277,7 @@ export default function RouteScreen() {
               stop={stop}
               index={i + 1}
               colors={colors}
+              liveStatus={stationStatuses[stop.station.id]}
               onPress={() =>
                 router.push({
                   pathname: '/(app)/trip/stop-detail',
@@ -188,13 +296,23 @@ function StopCard({
   stop,
   index,
   colors,
+  liveStatus,
   onPress,
 }: {
   stop: RouteStop;
   index: number;
   colors: ColorScheme;
+  liveStatus?: boolean;
   onPress: () => void;
 }) {
+  const statusColor =
+    liveStatus === undefined
+      ? colors.textMuted
+      : liveStatus
+      ? colors.success
+      : colors.error;
+  const statusText =
+    liveStatus === undefined ? '' : liveStatus ? '● Live: Available' : '● Live: Offline';
   return (
     <TouchableOpacity
       style={{
@@ -239,6 +357,11 @@ function StopCard({
         <Text style={{ fontSize: 12, color: colors.primary, marginTop: 2, fontWeight: '600' }}>
           ~{stop.estimatedChargeMinutes} min charge · {stop.station.powerKw} kW
         </Text>
+        {statusText ? (
+          <Text style={{ fontSize: 11, color: statusColor, marginTop: 4, fontWeight: '600' }}>
+            {statusText}
+          </Text>
+        ) : null}
         {stop.station.amenities.length > 0 && (
           <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
             📍 {stop.station.amenities.length} nearby amenities
@@ -332,19 +455,46 @@ function makeStyles(colors: ColorScheme) {
       borderRadius: 14,
       paddingVertical: 14,
       alignItems: 'center',
-      marginBottom: 18,
+      marginBottom: 8,
     },
     startBtnText: {
       color: colors.primaryForeground,
       fontWeight: '700',
       fontSize: 15,
     },
+    actionRow: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
+    shareBtn: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: 50,
+    },
+    shareBtnText: { color: colors.primary, fontWeight: '700', fontSize: 18 },
+    alertsBtn: {
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      borderRadius: 14,
+      padding: 12,
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    alertsBtnActive: { backgroundColor: `${colors.primary}22` },
+    alertsBtnText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
+    alertsBtnTextActive: { color: colors.primary },
+    stopsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
     stopsHeading: {
       fontSize: 16,
       fontWeight: '700',
       color: colors.text,
-      marginBottom: 12,
     },
+    refreshBtn: { fontSize: 13, color: colors.primary, fontWeight: '600' },
     stopsList: { flex: 1 },
     noStops: {
       color: colors.textSecondary,

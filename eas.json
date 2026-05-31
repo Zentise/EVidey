@@ -1,0 +1,52 @@
+{
+  "cli": {
+    "version": ">= 20.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDOZ4tdjj4bnRvvKtn9OL1cwUBnrvQpBxQ",
+        "EXPO_PUBLIC_OCM_API_KEY": "7aa9aa0d-d9ae-49f2-b646-db646a5aac45",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCgQYr77rDqOriy_3O8ZK4RZzfzUhJ7Fus",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "evidey-497805.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "evidey-497805",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "evidey-497805.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "289029861206",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:289029861206:web:094932a7482658b285f0f7"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDOZ4tdjj4bnRvvKtn9OL1cwUBnrvQpBxQ",
+        "EXPO_PUBLIC_OCM_API_KEY": "7aa9aa0d-d9ae-49f2-b646-db646a5aac45",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCgQYr77rDqOriy_3O8ZK4RZzfzUhJ7Fus",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "evidey-497805.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "evidey-497805",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "evidey-497805.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "289029861206",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:289029861206:web:094932a7482658b285f0f7"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDOZ4tdjj4bnRvvKtn9OL1cwUBnrvQpBxQ",
+        "EXPO_PUBLIC_OCM_API_KEY": "7aa9aa0d-d9ae-49f2-b646-db646a5aac45",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCgQYr77rDqOriy_3O8ZK4RZzfzUhJ7Fus",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "evidey-497805.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "evidey-497805",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "evidey-497805.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "289029861206",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:289029861206:web:094932a7482658b285f0f7"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+

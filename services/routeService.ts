@@ -53,8 +53,9 @@ export async function planTrip(
   const polyline: string = route.polyline?.encodedPolyline ?? '';
 
   // --- Step 2: Compute charging stop waypoints ---
-  // Use 85% usable range for safety (accounting for real-world variance)
-  const usableRangeKm = vehicle.realWorldRangeKm * 0.85;
+  // Apply battery degradation before computing range
+  const effectiveRangeKm = computeEffectiveRange(vehicle);
+  const usableRangeKm = effectiveRangeKm * 0.85;
   const stopPoints = computeStopCoordinates(
     origin,
     destination,
@@ -80,7 +81,7 @@ export async function planTrip(
     station.amenities = await fetchAmenitiesNearStation(station.coordinates);
 
     const distFromPrev = point.distanceKm - prevKm;
-    const consumedPercent = (distFromPrev / vehicle.realWorldRangeKm) * 100;
+    const consumedPercent = (distFromPrev / computeEffectiveRange(vehicle)) * 100;
     const arrivalPercent = Math.max(batteryPercent - consumedPercent, 5);
     const targetPercent = 80; // charge to 80% to avoid slow top-up
     const chargePercent = targetPercent - arrivalPercent;
@@ -111,6 +112,22 @@ export async function planTrip(
     polyline,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Compute effective range considering battery degradation.
+ * Priority: explicit batteryHealthPercent → estimate from mileage → use nominal range.
+ * Li-ion degrades ~3% per 100,000 km, minimum 70% capacity.
+ */
+function computeEffectiveRange(vehicle: import('../types').Vehicle): number {
+  if (vehicle.batteryHealthPercent !== undefined) {
+    return vehicle.realWorldRangeKm * (vehicle.batteryHealthPercent / 100);
+  }
+  if (vehicle.currentMileageKm !== undefined && vehicle.currentMileageKm > 0) {
+    const factor = Math.max(0.70, 1 - (vehicle.currentMileageKm / 100000) * 0.03);
+    return vehicle.realWorldRangeKm * factor;
+  }
+  return vehicle.realWorldRangeKm;
 }
 
 /**

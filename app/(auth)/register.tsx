@@ -13,6 +13,7 @@ import { useState, useMemo } from 'react';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
 import { useTheme } from '../../hooks/useTheme';
+import { firebaseRegister, isFirebaseConfigured } from '../../services/firebaseService';
 import type { ColorScheme } from '../../constants/colors';
 import type { User } from '../../types';
 
@@ -57,17 +58,27 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      // TODO: replace with real Firebase auth call
-      const mockUser: User = {
-        id: Date.now().toString(),
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        vehicles: [],
-      };
-      await setUser(mockUser);
+      let user: User;
+      if (isFirebaseConfigured) {
+        const cred = await firebaseRegister(email.trim().toLowerCase(), password, name.trim());
+        user = {
+          id: cred.user.uid,
+          name: name.trim(),
+          email: cred.user.email ?? email.trim().toLowerCase(),
+          vehicles: [],
+        };
+      } else {
+        user = {
+          id: Date.now().toString(),
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          vehicles: [],
+        };
+      }
+      await setUser(user);
       router.replace('/(auth)/vehicle-setup');
-    } catch {
-      Alert.alert('Registration failed', 'Please try again.');
+    } catch (err: any) {
+      Alert.alert('Registration failed', err.message ?? 'Please try again.');
     } finally {
       setLoading(false);
     }

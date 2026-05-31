@@ -137,6 +137,35 @@ export async function fetchAmenitiesNearStation(
   return results;
 }
 
+/**
+ * Refresh operational status for a list of station IDs.
+ * OCM returns the same POI objects — we extract the StatusType.IsOperational flag.
+ * Returns a map of stationId → isOperational.
+ */
+export async function refreshStationStatuses(
+  stationIds: string[]
+): Promise<Record<string, boolean>> {
+  if (stationIds.length === 0) return {};
+  const params: Record<string, unknown> = {
+    output: 'json',
+    id: stationIds.join(','),
+    compact: true,
+    verbose: false,
+    key: API_KEYS.OPEN_CHARGE_MAP,
+  };
+  try {
+    const { data } = await axios.get(`${OPEN_CHARGE_MAP_BASE_URL}/poi`, { params });
+    const result: Record<string, boolean> = {};
+    for (const item of data as any[]) {
+      result[String(item.ID)] = item.StatusType?.IsOperational ?? true;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+
 function googleTypeToCategory(type: string): Amenity['category'] {
   const map: Record<string, Amenity['category']> = {
     cafe: 'cafe',

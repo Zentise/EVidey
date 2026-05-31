@@ -22,7 +22,16 @@ import {
 } from '../../../services/locationService';
 import { useTheme } from '../../../hooks/useTheme';
 import type { ColorScheme } from '../../../constants/colors';
-import type { Coordinates } from '../../../types';
+import type { Coordinates, Vehicle } from '../../../types';
+
+function computeEffectiveRange(v: Vehicle): number {
+  if (v.batteryHealthPercent !== undefined) return v.realWorldRangeKm * (v.batteryHealthPercent / 100);
+  if (v.currentMileageKm) {
+    const factor = Math.max(0.70, 1 - (v.currentMileageKm / 100000) * 0.03);
+    return v.realWorldRangeKm * factor;
+  }
+  return v.realWorldRangeKm;
+}
 
 export default function PlanTripScreen() {
   const user = useAuthStore((s) => s.user);
@@ -32,6 +41,10 @@ export default function PlanTripScreen() {
     setCurrentTrip,
     setSelectedVehicle,
     selectedVehicleId,
+    cachedTrip,
+    loadCachedTrip,
+    cacheCurrentTrip,
+    setOffline,
   } = useTripStore();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -48,8 +61,13 @@ export default function PlanTripScreen() {
   const vehicles = user?.vehicles ?? [];
   const activeVehicleId = selectedVehicleId ?? user?.defaultVehicleId ?? vehicles[0]?.id;
   const activeVehicle = vehicles.find((v) => v.id === activeVehicleId);
+  const effectiveRange = activeVehicle ? Math.round(computeEffectiveRange(activeVehicle)) : 0;
+  const isDegraded = activeVehicle && effectiveRange < activeVehicle.realWorldRangeKm;
 
-  useEffect(() => { fetchLocation(); }, []);
+  useEffect(() => {
+    fetchLocation();
+    loadCachedTrip();
+  }, []);
 
   async function fetchLocation() {
     setLoadingLocation(true);
@@ -117,12 +135,35 @@ export default function PlanTripScreen() {
       setSelectedVehicle(activeVehicle.id);
       const trip = await planTrip(originCoords, destCoords, activeVehicle);
       setCurrentTrip(trip);
+      await cacheCurrentTrip(trip);
       router.push('/(app)/trip/route');
     } catch (err: any) {
-      Alert.alert(
-        'Could not plan trip',
-        err?.response?.data?.error?.message ?? err?.message ?? 'Check your internet and API key.'
-      );
+      const isOfflineErr =
+        err?.message?.toLowerCase().includes('network') ||
+        err?.message?.toLowerCase().includes('timeout') ||
+        err?.code === 'ERR_NETWORK';
+      if (isOfflineErr && cachedTrip) {
+        setOffline(true);
+        Alert.alert(
+          'You appear to be offline',
+          'Showing your last saved route instead.',
+          [
+            {
+              text: 'Load Last Trip',
+              onPress: () => {
+                setCurrentTrip(cachedTrip);
+                router.push('/(app)/trip/route');
+              },
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Could not plan trip',
+          err?.response?.data?.error?.message ?? err?.message ?? 'Check your internet and API key.'
+        );
+      }
     } finally {
       setPlanning(false);
     }
@@ -222,7 +263,12 @@ export default function PlanTripScreen() {
         {activeVehicle && (
           <View style={styles.rangeCard}>
             <Text style={styles.rangeLabel}>Estimated range available</Text>
-            <Text style={styles.rangeValue}>{activeVehicle.realWorldRangeKm} km</Text>
+            <Text style={styles.rangeValue}>{effectiveRange} km</Text>
+            {isDegraded && (
+              <Text style={styles.degradedNote}>
+                ⚠️ Nominal {activeVehicle.realWorldRangeKm} km · degradation applied
+              </Text>
+            )}
             <Text style={styles.rangeHint}>
               {activeVehicle.batteryCapacityKwh} kWh battery ·{' '}
               {activeVehicle.connectorTypes.join(', ')}
@@ -360,6 +406,7 @@ function makeStyles(colors: ColorScheme) {
       letterSpacing: 0.5,
     },
     rangeValue: { fontSize: 36, fontWeight: '800', color: colors.primary, marginTop: 4 },
+    degradedNote: { fontSize: 12, color: colors.warning, marginTop: 2, fontWeight: '600' },
     rangeHint: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
     btn: {
       backgroundColor: colors.primary,

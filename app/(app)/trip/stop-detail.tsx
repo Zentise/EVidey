@@ -4,12 +4,15 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Linking,
+  Alert,
 } from 'react-native';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTripStore } from '../../../store/tripStore';
 import { useAuthStore } from '../../../store/authStore';
+import { useReviewStore } from '../../../store/reviewStore';
 import { useTheme } from '../../../hooks/useTheme';
 import type { ColorScheme } from '../../../constants/colors';
 import type { Amenity } from '../../../types';
@@ -31,10 +34,45 @@ export default function StopDetailScreen() {
   const user = useAuthStore((s) => s.user);
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const loadReviews = useReviewStore((s) => s.loadReviews);
+  const addReview = useReviewStore((s) => s.addReview);
+  const reviews = useReviewStore((s) => s.reviews);
 
   const stop = trip?.stops[parseInt(stopIndex ?? '0', 10)];
   const vehicle = user?.vehicles.find((v) => v.id === trip?.vehicleId);
   const isCar = vehicle?.type === 'car';
+
+  const stationId = stop?.station.id ?? '';
+  const stationReviews = reviews[stationId] ?? [];
+
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (stationId) loadReviews(stationId);
+  }, [stationId]);
+
+  async function handleSubmitReview() {
+    if (!user || !stationId) return;
+    setSubmitting(true);
+    try {
+      await addReview(
+        stationId,
+        user.id,
+        user.name,
+        reviewRating,
+        reviewComment.trim(),
+      );
+      setReviewComment('');
+      setReviewRating(5);
+      setShowReviewForm(false);
+    } catch (e: any) {
+      Alert.alert('Could not submit review', e?.message ?? 'Try again later.');
+    }
+    setSubmitting(false);
+  }
 
   if (!stop) {
     return (
@@ -177,6 +215,66 @@ export default function StopDetailScreen() {
           </Text>
         </View>
       )}
+
+      {/* Community Reviews */}
+      <View style={styles.reviewsSection}>
+        <View style={styles.reviewsHeader}>
+          <Text style={styles.sectionTitle}>Community Reviews</Text>
+          {user && (
+            <TouchableOpacity onPress={() => setShowReviewForm((v) => !v)}>
+              <Text style={styles.writeReviewBtn}>
+                {showReviewForm ? 'Cancel' : '✏️ Write a review'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {showReviewForm && (
+          <View style={styles.reviewForm}>
+            <Text style={styles.reviewFormLabel}>Your rating</Text>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <TouchableOpacity key={s} onPress={() => setReviewRating(s)}>
+                  <Text style={[styles.star, s <= reviewRating && styles.starActive]}>★</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={[styles.reviewInput, { color: colors.text }]}
+              placeholder="Share your experience (optional)"
+              placeholderTextColor={colors.textMuted}
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              multiline
+              numberOfLines={3}
+            />
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+              onPress={handleSubmitReview}
+              disabled={submitting}
+            >
+              <Text style={styles.submitBtnText}>{submitting ? 'Submitting…' : 'Submit Review'}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {stationReviews.length === 0 && !showReviewForm && (
+          <Text style={styles.noReviewsText}>No reviews yet — be the first!</Text>
+        )}
+
+        {stationReviews.map((r) => (
+          <View key={r.id} style={styles.reviewCard}>
+            <View style={styles.reviewCardTop}>
+              <Text style={styles.reviewUser}>{r.userName}</Text>
+              <Text style={styles.reviewStars}>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</Text>
+            </View>
+            {r.comment ? <Text style={styles.reviewComment}>{r.comment}</Text> : null}
+            <Text style={styles.reviewDate}>
+              {new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -386,5 +484,63 @@ function makeStyles(colors: ColorScheme) {
     },
     noAmenities: { alignItems: 'center', paddingVertical: 32 },
     noAmenitiesText: { color: colors.textMuted, fontSize: 14, textAlign: 'center' },
+    reviewsSection: {
+      marginTop: 12,
+      marginBottom: 40,
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    reviewsHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    writeReviewBtn: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+    reviewForm: {
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 16,
+    },
+    reviewFormLabel: { color: colors.text, fontWeight: '700', marginBottom: 8 },
+    starRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+    star: { fontSize: 28, color: colors.border },
+    starActive: { color: colors.warning },
+    reviewInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 12,
+      fontSize: 14,
+      minHeight: 70,
+      textAlignVertical: 'top',
+      backgroundColor: colors.background,
+      marginBottom: 10,
+    },
+    submitBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    noReviewsText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+    reviewCard: {
+      backgroundColor: colors.background,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    reviewCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+    reviewUser: { fontWeight: '700', color: colors.text, fontSize: 13 },
+    reviewStars: { color: colors.warning, fontSize: 14 },
+    reviewComment: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: 4 },
+    reviewDate: { color: colors.textMuted, fontSize: 11 },
   });
 }

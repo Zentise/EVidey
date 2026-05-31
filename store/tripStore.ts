@@ -3,10 +3,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { TripPlan, Coordinates } from '../types';
 
 const SAVED_TRIPS_KEY = 'evidey_saved_trips';
+const CACHED_TRIP_KEY = 'evidey_cached_trip';
 
 interface TripState {
   currentTrip: TripPlan | null;
   savedTrips: TripPlan[];
+  cachedTrip: TripPlan | null;
+  isOffline: boolean;
+  /** stationId → isOperational (live refresh result) */
+  stationStatuses: Record<string, boolean>;
   isPlanning: boolean;
   originLabel: string;
   destinationLabel: string;
@@ -20,6 +25,10 @@ interface TripState {
   saveTrip: (trip: TripPlan) => void;
   removeSavedTrip: (tripId: string) => void;
   loadSavedTrips: () => Promise<void>;
+  loadCachedTrip: () => Promise<void>;
+  cacheCurrentTrip: (trip: TripPlan) => Promise<void>;
+  setOffline: (value: boolean) => void;
+  updateStationStatuses: (statuses: Record<string, boolean>) => void;
   setPlanning: (value: boolean) => void;
   resetPlanning: () => void;
 }
@@ -27,6 +36,9 @@ interface TripState {
 export const useTripStore = create<TripState>((set, get) => ({
   currentTrip: null,
   savedTrips: [],
+  cachedTrip: null,
+  isOffline: false,
+  stationStatuses: {},
   isPlanning: false,
   originLabel: '',
   destinationLabel: '',
@@ -62,6 +74,23 @@ export const useTripStore = create<TripState>((set, get) => ({
       if (raw) set({ savedTrips: JSON.parse(raw) });
     } catch {}
   },
+
+  cacheCurrentTrip: async (trip) => {
+    set({ cachedTrip: trip });
+    await AsyncStorage.setItem(CACHED_TRIP_KEY, JSON.stringify(trip)).catch(() => {});
+  },
+
+  loadCachedTrip: async () => {
+    try {
+      const raw = await AsyncStorage.getItem(CACHED_TRIP_KEY);
+      if (raw) set({ cachedTrip: JSON.parse(raw) });
+    } catch {}
+  },
+
+  setOffline: (value) => set({ isOffline: value }),
+
+  updateStationStatuses: (statuses) =>
+    set({ stationStatuses: { ...get().stationStatuses, ...statuses } }),
 
   setPlanning: (value) => set({ isPlanning: value }),
 

@@ -41,6 +41,8 @@ export default function VehicleSetupScreen() {
   const [batteryKwh, setBatteryKwh] = useState('');
   const [rangeKm, setRangeKm] = useState('');
   const [selectedConnectors, setSelectedConnectors] = useState<ConnectorType[]>([]);
+  const [batteryHealth, setBatteryHealth] = useState('');   // optional, 0–100%
+  const [mileageKm, setMileageKm] = useState('');           // optional, odometer in km
   const [loading, setLoading] = useState(false);
 
   function toggleConnector(c: ConnectorType) {
@@ -60,6 +62,8 @@ export default function VehicleSetupScreen() {
     }
 
     setLoading(true);
+    const healthVal = batteryHealth.trim() ? parseFloat(batteryHealth) : undefined;
+    const mileageVal = mileageKm.trim() ? parseFloat(mileageKm) : undefined;
     const vehicle: Vehicle = {
       id: Date.now().toString(),
       name: nickname.trim() || `${make} ${model}`,
@@ -70,6 +74,8 @@ export default function VehicleSetupScreen() {
       batteryCapacityKwh: parseFloat(batteryKwh),
       realWorldRangeKm: parseFloat(rangeKm),
       connectorTypes: selectedConnectors,
+      ...(healthVal !== undefined && { batteryHealthPercent: Math.min(100, Math.max(0, healthVal)) }),
+      ...(mileageVal !== undefined && { currentMileageKm: mileageVal }),
     };
 
     await addVehicle(vehicle);
@@ -188,6 +194,31 @@ export default function VehicleSetupScreen() {
         ))}
       </View>
 
+      <Text style={styles.sectionTitle}>🔋 Battery Health (Optional)</Text>
+      <Text style={styles.sectionHint}>
+        Helps adjust range estimates for your battery's current condition. Check your vehicle's OBD app or manufacturer service.
+      </Text>
+
+      <Text style={styles.label}>Battery Health %</Text>
+      <TextInput
+        style={styles.input}
+        value={batteryHealth}
+        onChangeText={setBatteryHealth}
+        placeholder="e.g. 92  (leave blank if unknown)"
+        placeholderTextColor={colors.textMuted}
+        keyboardType="numeric"
+      />
+
+      <Text style={styles.label}>Current Odometer (km)</Text>
+      <TextInput
+        style={styles.input}
+        value={mileageKm}
+        onChangeText={setMileageKm}
+        placeholder="e.g. 25000  (used if health % not set)"
+        placeholderTextColor={colors.textMuted}
+        keyboardType="numeric"
+      />
+
       <TouchableOpacity
         style={[styles.btn, loading && styles.btnDisabled]}
         onPress={handleSave}
@@ -273,6 +304,19 @@ function makeStyles(colors: ColorScheme) {
     },
     connectorText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
     connectorTextActive: { color: colors.primary },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 28,
+      marginBottom: 4,
+    },
+    sectionHint: {
+      fontSize: 12,
+      color: colors.textMuted,
+      lineHeight: 18,
+      marginBottom: 4,
+    },
     btn: {
       backgroundColor: colors.primary,
       borderRadius: 14,

@@ -18,6 +18,10 @@ export interface Vehicle {
   batteryCapacityKwh: number;
   realWorldRangeKm: number;
   connectorTypes: ConnectorType[];
+  /** 0–100 — actual battery health from OBD or manufacturer app (optional) */
+  batteryHealthPercent?: number;
+  /** Odometer reading in km — used to estimate degradation if healthPercent not set */
+  currentMileageKm?: number;
 }
 
 export interface User {
@@ -26,6 +30,17 @@ export interface User {
   email: string;
   vehicles: Vehicle[];
   defaultVehicleId?: string;
+  photoUrl?: string;
+}
+
+export interface Review {
+  id: string;
+  stationId: string;
+  userId: string;
+  userName: string;
+  rating: number;      // 1–5
+  comment: string;
+  createdAt: string;   // ISO string
 }
 
 export interface Coordinates {
