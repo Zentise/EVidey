@@ -2,6 +2,24 @@
 
 An EV trip planner for Indian roads. Enter your destination, pick your vehicle, and EVidey calculates the optimal route with real charging stops, charge times, nearby food, and hotel recommendations — all in one app.
 
+<p align="center">
+  <img src="ss/evidey.gif" alt="EVidey demo" width="320" />
+</p>
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="ss/login.png" alt="Login" width="200" />
+  &nbsp;&nbsp;
+  <img src="ss/home.png" alt="Home" width="200" />
+  &nbsp;&nbsp;
+  <img src="ss/map.png" alt="Map" width="200" />
+  &nbsp;&nbsp;
+  <img src="ss/route.png" alt="Route" width="200" />
+</p>
+
 ---
 
 ## Features
@@ -14,7 +32,8 @@ An EV trip planner for Indian roads. Enter your destination, pick your vehicle, 
 - **Nearby Amenities** — Cafes, restaurants, pharmacies within walking distance of each charger
 - **Hotel Recommendations** — For car users, nearby hotels within 3 km of each stop
 - **Multi-vehicle Support** — Add multiple EVs, switch between them per trip
-- **Offline-ready Auth** — Accounts and vehicle data stored locally via AsyncStorage
+- **Dark / Light Mode** — Full theme support
+- **Account System** — Email/password auth via Firebase
 
 ---
 
