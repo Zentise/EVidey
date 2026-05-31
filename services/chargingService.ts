@@ -51,22 +51,23 @@ export async function fetchChargingStations(
 
 /**
  * Fetch nearby amenities (food, cafes, washrooms, etc.) using Google Places.
+ * Lodging is searched at a wider radius since hotels are rarely within 500m.
  */
 export async function fetchAmenitiesNearStation(
   coords: Coordinates
 ): Promise<Amenity[]> {
-  const types = [
+  const nearbyTypes = [
     'cafe',
     'restaurant',
     'convenience_store',
-    'lodging',
     'rest_stop',
     'pharmacy',
   ];
 
   const results: Amenity[] = [];
 
-  for (const type of types) {
+  // Regular nearby amenities (500m)
+  for (const type of nearbyTypes) {
     const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json`;
     const params = {
       location: `${coords.latitude},${coords.longitude}`,
@@ -97,6 +98,40 @@ export async function fetchAmenitiesNearStation(
     } catch {
       // Silently continue if one category fails
     }
+  }
+
+  // Lodging searched at wider 3km radius — hotels near highways are rarely within 500m
+  try {
+    const { data } = await axios.get(
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json`,
+      {
+        params: {
+          location: `${coords.latitude},${coords.longitude}`,
+          radius: 3000,
+          type: 'lodging',
+          rankby: 'prominence',
+          key: API_KEYS.GOOGLE_MAPS,
+        },
+      }
+    );
+    const places = (data.results ?? []).slice(0, 5);
+    for (const place of places) {
+      const lat: number = place.geometry.location.lat;
+      const lng: number = place.geometry.location.lng;
+      const dist = haversineMeters(coords, { latitude: lat, longitude: lng });
+      results.push({
+        id: place.place_id,
+        name: place.name,
+        category: 'stay',
+        coordinates: { latitude: lat, longitude: lng },
+        distanceMeters: dist,
+        rating: place.rating,
+        isOpen: place.opening_hours?.open_now,
+        address: place.vicinity,
+      });
+    }
+  } catch {
+    // Silently continue
   }
 
   return results;

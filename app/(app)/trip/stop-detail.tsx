@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   Linking,
 } from 'react-native';
+import { useMemo } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useTripStore } from '../../../store/tripStore';
-import { Colors } from '../../../constants/colors';
+import { useAuthStore } from '../../../store/authStore';
+import { useTheme } from '../../../hooks/useTheme';
+import type { ColorScheme } from '../../../constants/colors';
 import type { Amenity } from '../../../types';
 
 const AMENITY_ICONS: Record<string, string> = {
@@ -25,8 +28,13 @@ const AMENITY_ICONS: Record<string, string> = {
 export default function StopDetailScreen() {
   const { stopIndex } = useLocalSearchParams<{ stopIndex: string }>();
   const trip = useTripStore((s) => s.currentTrip);
+  const user = useAuthStore((s) => s.user);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const stop = trip?.stops[parseInt(stopIndex ?? '0', 10)];
+  const vehicle = user?.vehicles.find((v) => v.id === trip?.vehicleId);
+  const isCar = vehicle?.type === 'car';
 
   if (!stop) {
     return (
@@ -45,13 +53,17 @@ export default function StopDetailScreen() {
     Linking.openURL(url);
   }
 
-  const amenityGroups = stop.station.amenities.reduce<
-    Record<string, Amenity[]>
-  >((acc, a) => {
-    if (!acc[a.category]) acc[a.category] = [];
-    acc[a.category].push(a);
-    return acc;
-  }, {});
+  const amenityGroups = stop.station.amenities.reduce<Record<string, Amenity[]>>(
+    (acc, a) => {
+      if (a.category === 'stay') return acc;
+      if (!acc[a.category]) acc[a.category] = [];
+      acc[a.category].push(a);
+      return acc;
+    },
+    {}
+  );
+
+  const stays = stop.station.amenities.filter((a) => a.category === 'stay');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -80,22 +92,26 @@ export default function StopDetailScreen() {
         <ChargeStat
           label="Arrive at"
           value={`${stop.arrivalBatteryPercent}%`}
-          color={stop.arrivalBatteryPercent < 20 ? Colors.warning : Colors.text}
+          color={stop.arrivalBatteryPercent < 20 ? colors.warning : colors.text}
+          textSecondary={colors.textSecondary}
         />
         <ChargeStat
           label="Leave at"
           value={`${stop.departureBatteryPercent}%`}
-          color={Colors.primary}
+          color={colors.primary}
+          textSecondary={colors.textSecondary}
         />
         <ChargeStat
           label="Charge time"
           value={`~${stop.estimatedChargeMinutes} min`}
-          color={Colors.text}
+          color={colors.text}
+          textSecondary={colors.textSecondary}
         />
         <ChargeStat
           label="Charger speed"
           value={`${stop.station.powerKw} kW`}
-          color={Colors.text}
+          color={colors.text}
+          textSecondary={colors.textSecondary}
         />
       </View>
 
@@ -112,14 +128,34 @@ export default function StopDetailScreen() {
         <Text style={styles.mapsBtnText}>Open in Google Maps →</Text>
       </TouchableOpacity>
 
+      {/* Stay Recommendations — shown for car users */}
+      {isCar && (
+        <View style={styles.staySection}>
+          <Text style={styles.staySectionTitle}>🏨 Where to Stay</Text>
+          {stays.length > 0 ? (
+            <>
+              <Text style={styles.staySectionSubtitle}>
+                Hotels near this charging stop — perfect for overnight trips
+              </Text>
+              {stays.map((hotel) => (
+                <StayCard key={hotel.id} hotel={hotel} colors={colors} />
+              ))}
+            </>
+          ) : (
+            <Text style={styles.noStayText}>
+              No hotels found within 3 km of this charger.
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Amenities */}
-      {stop.station.amenities.length > 0 && (
+      {Object.keys(amenityGroups).length > 0 && (
         <View style={styles.amenitiesSection}>
           <Text style={styles.sectionTitle}>Nearby while you charge</Text>
           <Text style={styles.sectionSubtitle}>
-            Within {stop.estimatedChargeMinutes} min walking distance
+            Within walking distance
           </Text>
-
           {Object.entries(amenityGroups).map(([category, items]) => (
             <View key={category} style={styles.amenityGroup}>
               <Text style={styles.amenityGroupLabel}>
@@ -127,7 +163,7 @@ export default function StopDetailScreen() {
                 {category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
               </Text>
               {items.map((a) => (
-                <AmenityCard key={a.id} amenity={a} />
+                <AmenityCard key={a.id} amenity={a} colors={colors} />
               ))}
             </View>
           ))}
@@ -149,36 +185,47 @@ function ChargeStat({
   label,
   value,
   color,
+  textSecondary,
 }: {
   label: string;
   value: string;
   color: string;
+  textSecondary: string;
 }) {
   return (
-    <View style={chargStatStyles.item}>
-      <Text style={[chargStatStyles.value, { color }]}>{value}</Text>
-      <Text style={chargStatStyles.label}>{label}</Text>
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      <Text style={{ fontSize: 18, fontWeight: '800', color }}>{value}</Text>
+      <Text style={{ fontSize: 11, color: textSecondary, marginTop: 2, fontWeight: '600' }}>
+        {label}
+      </Text>
     </View>
   );
 }
 
-const chargStatStyles = StyleSheet.create({
-  item: { flex: 1, alignItems: 'center' },
-  value: { fontSize: 18, fontWeight: '800' },
-  label: { fontSize: 11, color: Colors.textSecondary, marginTop: 2, fontWeight: '600' },
-});
-
-function AmenityCard({ amenity }: { amenity: Amenity }) {
+function AmenityCard({ amenity, colors }: { amenity: Amenity; colors: ColorScheme }) {
   function open() {
     const url = `https://www.google.com/maps/search/?api=1&query=${amenity.coordinates.latitude},${amenity.coordinates.longitude}`;
     Linking.openURL(url);
   }
 
   return (
-    <TouchableOpacity style={amenityStyles.card} onPress={open} activeOpacity={0.7}>
-      <View style={amenityStyles.info}>
-        <Text style={amenityStyles.name}>{amenity.name}</Text>
-        <Text style={amenityStyles.meta}>
+    <TouchableOpacity
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 8,
+      }}
+      onPress={open}
+      activeOpacity={0.7}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }}>
+          {amenity.name}
+        </Text>
+        <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
           {Math.round(amenity.distanceMeters)} m away
           {amenity.rating ? ` · ⭐ ${amenity.rating}` : ''}
           {amenity.isOpen === true
@@ -188,162 +235,156 @@ function AmenityCard({ amenity }: { amenity: Amenity }) {
             : ''}
         </Text>
       </View>
-      <Text style={amenityStyles.arrow}>›</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 20 }}>›</Text>
     </TouchableOpacity>
   );
 }
 
-const amenityStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceAlt,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-  },
-  info: { flex: 1 },
-  name: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  meta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  arrow: { color: Colors.textMuted, fontSize: 20 },
-});
+function StayCard({ hotel, colors }: { hotel: Amenity; colors: ColorScheme }) {
+  function open() {
+    const url = `https://www.google.com/maps/search/?api=1&query=${hotel.coordinates.latitude},${hotel.coordinates.longitude}`;
+    Linking.openURL(url);
+  }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Colors.background,
-  },
-  errorText: { color: Colors.text, fontSize: 16 },
-  backLink: { color: Colors.primary, marginTop: 12, fontSize: 15 },
-  backBtn: {
-    marginBottom: 20,
-  },
-  backBtnText: {
-    color: Colors.primary,
-    fontWeight: '600',
-    fontSize: 15,
-  },
-  stationCard: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'flex-start',
-    gap: 14,
-  },
-  stationIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: `${Colors.primary}22`,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  stationInfo: { flex: 1 },
-  stationName: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.text,
-  },
-  stationOperator: {
-    fontSize: 13,
-    color: Colors.primary,
-    marginTop: 2,
-    fontWeight: '600',
-  },
-  stationAddress: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  chargePlan: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  connectorRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  connectorTag: {
-    backgroundColor: `${Colors.primary}22`,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  connectorText: {
-    color: Colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  mapsBtn: {
-    borderWidth: 1,
-    borderColor: Colors.route,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  mapsBtnText: {
-    color: Colors.route,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  amenitiesSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 20,
-  },
-  amenityGroup: {
-    marginBottom: 20,
-  },
-  amenityGroupLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  noAmenities: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  noAmenitiesText: {
-    color: Colors.textMuted,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-});
+  return (
+    <TouchableOpacity
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+        gap: 12,
+      }}
+      onPress={open}
+      activeOpacity={0.7}
+    >
+      <View
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          backgroundColor: `${colors.warning}22`,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 22 }}>🏨</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>{hotel.name}</Text>
+        <Text style={{ fontSize: 12, color: colors.primary, marginTop: 2, fontWeight: '600' }}>
+          {(hotel.distanceMeters / 1000).toFixed(1)} km away
+          {hotel.rating ? ` · ⭐ ${hotel.rating}` : ''}
+        </Text>
+        {hotel.address ? (
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 2 }} numberOfLines={1}>
+            {hotel.address}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={{ color: colors.textMuted, fontSize: 20 }}>›</Text>
+    </TouchableOpacity>
+  );
+}
+
+function makeStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 40 },
+    centered: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    errorText: { color: colors.text, fontSize: 16 },
+    backLink: { color: colors.primary, marginTop: 12, fontSize: 15 },
+    backBtn: { marginBottom: 20 },
+    backBtnText: { color: colors.primary, fontWeight: '600', fontSize: 15 },
+    stationCard: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'flex-start',
+      gap: 14,
+    },
+    stationIcon: {
+      width: 52,
+      height: 52,
+      borderRadius: 14,
+      backgroundColor: `${colors.primary}22`,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    stationInfo: { flex: 1 },
+    stationName: { fontSize: 18, fontWeight: '800', color: colors.text },
+    stationOperator: { fontSize: 13, color: colors.primary, marginTop: 2, fontWeight: '600' },
+    stationAddress: { fontSize: 12, color: colors.textSecondary, marginTop: 4, lineHeight: 18 },
+    chargePlan: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    connectorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+    connectorTag: {
+      backgroundColor: `${colors.primary}22`,
+      borderRadius: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
+    connectorText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
+    mapsBtn: {
+      borderWidth: 1,
+      borderColor: colors.route,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+      marginBottom: 28,
+    },
+    mapsBtnText: { color: colors.route, fontWeight: '700', fontSize: 14 },
+    staySection: {
+      marginBottom: 28,
+      backgroundColor: colors.surface,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    staySectionTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 4 },
+    staySectionSubtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 16,
+      lineHeight: 18,
+    },
+    noStayText: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+    amenitiesSection: { marginBottom: 20 },
+    sectionTitle: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 4 },
+    sectionSubtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: 20 },
+    amenityGroup: { marginBottom: 20 },
+    amenityGroupLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 10,
+    },
+    noAmenities: { alignItems: 'center', paddingVertical: 32 },
+    noAmenitiesText: { color: colors.textMuted, fontSize: 14, textAlign: 'center' },
+  });
+}

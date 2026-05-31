@@ -7,15 +7,16 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
-import { Colors } from '../../constants/colors';
+import { useTheme } from '../../hooks/useTheme';
+import type { ColorScheme } from '../../constants/colors';
 import type { Vehicle, VehicleType, ConnectorType } from '../../types';
 
 const VEHICLE_TYPES: { label: string; value: VehicleType }[] = [
-  { label: 'Car', value: 'car' },
-  { label: '2-Wheeler', value: 'two_wheeler' },
+  { label: '🚗  Car', value: 'car' },
+  { label: '🛵  2-Wheeler', value: 'two_wheeler' },
 ];
 
 const CONNECTORS: { label: string; value: ConnectorType }[] = [
@@ -29,6 +30,8 @@ const CONNECTORS: { label: string; value: ConnectorType }[] = [
 
 export default function VehicleSetupScreen() {
   const addVehicle = useAuthStore((s) => s.addVehicle);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [type, setType] = useState<VehicleType>('car');
   const [nickname, setNickname] = useState('');
@@ -85,7 +88,6 @@ export default function VehicleSetupScreen() {
         This helps us plan accurate charging stops for your trips.
       </Text>
 
-      {/* Vehicle type toggle */}
       <Text style={styles.label}>Vehicle Type</Text>
       <View style={styles.toggleRow}>
         {VEHICLE_TYPES.map((vt) => (
@@ -112,7 +114,7 @@ export default function VehicleSetupScreen() {
         value={nickname}
         onChangeText={setNickname}
         placeholder="e.g. My Tata Nexon"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
       />
 
       <Text style={styles.label}>Make *</Text>
@@ -121,7 +123,7 @@ export default function VehicleSetupScreen() {
         value={make}
         onChangeText={setMake}
         placeholder="e.g. Tata, MG, BYD"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
       />
 
       <Text style={styles.label}>Model *</Text>
@@ -130,7 +132,7 @@ export default function VehicleSetupScreen() {
         value={model}
         onChangeText={setModel}
         placeholder="e.g. Nexon EV, ZS EV"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
       />
 
       <Text style={styles.label}>Year *</Text>
@@ -139,7 +141,7 @@ export default function VehicleSetupScreen() {
         value={year}
         onChangeText={setYear}
         placeholder="e.g. 2024"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
         keyboardType="numeric"
       />
 
@@ -149,7 +151,7 @@ export default function VehicleSetupScreen() {
         value={batteryKwh}
         onChangeText={setBatteryKwh}
         placeholder="e.g. 40.5"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
         keyboardType="decimal-pad"
       />
 
@@ -159,7 +161,7 @@ export default function VehicleSetupScreen() {
         value={rangeKm}
         onChangeText={setRangeKm}
         placeholder="e.g. 300"
-        placeholderTextColor={Colors.textMuted}
+        placeholderTextColor={colors.textMuted}
         keyboardType="numeric"
       />
 
@@ -197,108 +199,92 @@ export default function VehicleSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  content: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-    gap: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginBottom: 24,
-    lineHeight: 20,
-  },
-  label: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 4,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: Colors.text,
-    fontSize: 15,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 4,
-  },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-  },
-  toggleBtnActive: {
-    borderColor: Colors.primary,
-    backgroundColor: `${Colors.primary}22`,
-  },
-  toggleText: {
-    color: Colors.textSecondary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  toggleTextActive: {
-    color: Colors.primary,
-  },
-  connectorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 8,
-  },
-  connectorBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    backgroundColor: Colors.surface,
-  },
-  connectorBtnActive: {
-    borderColor: Colors.primary,
-    backgroundColor: `${Colors.primary}22`,
-  },
-  connectorText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  connectorTextActive: {
-    color: Colors.primary,
-  },
-  btn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 28,
-  },
-  btnDisabled: { opacity: 0.6 },
-  btnText: {
-    color: '#0F1923',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-});
+function makeStyles(colors: ColorScheme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    content: {
+      paddingHorizontal: 24,
+      paddingTop: 60,
+      paddingBottom: 40,
+      gap: 8,
+    },
+    title: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginBottom: 24,
+      lineHeight: 20,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 4,
+      marginTop: 12,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      color: colors.text,
+      fontSize: 15,
+    },
+    toggleRow: { flexDirection: 'row', gap: 12, marginBottom: 4 },
+    toggleBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+    },
+    toggleBtnActive: {
+      borderColor: colors.primary,
+      backgroundColor: `${colors.primary}22`,
+    },
+    toggleText: { color: colors.textSecondary, fontWeight: '600', fontSize: 14 },
+    toggleTextActive: { color: colors.primary },
+    connectorGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginBottom: 8,
+    },
+    connectorBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 20,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    connectorBtnActive: {
+      borderColor: colors.primary,
+      backgroundColor: `${colors.primary}22`,
+    },
+    connectorText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+    connectorTextActive: { color: colors.primary },
+    btn: {
+      backgroundColor: colors.primary,
+      borderRadius: 14,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginTop: 28,
+    },
+    btnDisabled: { opacity: 0.6 },
+    btnText: {
+      color: colors.primaryForeground,
+      fontWeight: '700',
+      fontSize: 16,
+    },
+  });
+}
