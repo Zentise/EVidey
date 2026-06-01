@@ -40,7 +40,7 @@ if (isFirebaseConfigured) {
     // initializeAuth throws if already initialized (e.g. hot reload)
     auth = getAuth(app);
   }
-  db = getFirestore(app);
+  db = getFirestore(app, 'evidey');
 }
 
 export { auth, db, isFirebaseConfigured, GoogleAuthProvider, signInWithCredential, onAuthStateChanged };

@@ -16,6 +16,7 @@ import type { ColorScheme } from '../../../constants/colors';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
+  const removeVehicle = useAuthStore((s) => s.removeVehicle);
   const savedTrips = useTripStore((s) => s.savedTrips);
   const { colors, isDark, toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -40,6 +41,17 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  }
+
+  function handleDeleteVehicle(vehicleId: string, vehicleName: string) {
+    Alert.alert(
+      'Remove Vehicle',
+      `Remove "${vehicleName}" from your vehicles?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removeVehicle(vehicleId) },
+      ]
+    );
   }
 
   return (
@@ -91,6 +103,13 @@ export default function ProfileScreen() {
               {v.connectorTypes.join(' · ')}
             </Text>
           </View>
+          <TouchableOpacity
+            style={styles.vehicleDeleteBtn}
+            onPress={() => handleDeleteVehicle(v.id, v.name)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.vehicleDeleteText}>✕</Text>
+          </TouchableOpacity>
         </View>
       ))}
 
@@ -214,6 +233,17 @@ function makeStyles(colors: ColorScheme) {
     vehicleName: { fontSize: 15, fontWeight: '700', color: colors.text },
     vehicleDetails: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
     vehicleConnectors: { fontSize: 11, color: colors.primary, marginTop: 4, fontWeight: '600' },
+    vehicleDeleteBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 10,
+      backgroundColor: `${colors.error}18`,
+      justifyContent: 'center',
+      alignItems: 'center',
+      alignSelf: 'center',
+      marginLeft: 8,
+    },
+    vehicleDeleteText: { fontSize: 14, color: colors.error, fontWeight: '700' },
     addBtn: {
       borderWidth: 1.5,
       borderColor: colors.primary,

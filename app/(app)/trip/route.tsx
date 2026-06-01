@@ -8,6 +8,8 @@ import {
   Alert,
   Linking,
   Share,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -29,6 +31,10 @@ import { PROXIMITY_ALERT_KM } from '../../../constants/config';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+const SNAP_COLLAPSED = 290;
+const SNAP_HALF = Math.round(SCREEN_HEIGHT * 0.52);
+const SNAP_EXPANDED = Math.round(SCREEN_HEIGHT * 0.91);
+
 export default function RouteScreen() {
   const trip = useTripStore((s) => s.currentTrip);
   const savedTrips = useTripStore((s) => s.savedTrips);
@@ -44,6 +50,51 @@ export default function RouteScreen() {
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const locationSubRef = useRef<Location.LocationSubscription | null>(null);
   const notifiedStops = useRef<Set<string>>(new Set());
+
+  // Expandable bottom panel
+  const panelHeight = useRef(new Animated.Value(SNAP_HALF)).current;
+  const lastPanelHeight = useRef(SNAP_HALF);
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 8,
+      onPanResponderGrant: () => {
+        panelHeight.stopAnimation((val) => {
+          lastPanelHeight.current = val;
+        });
+      },
+      onPanResponderMove: (_, gs) => {
+        const newH = Math.max(
+          SNAP_COLLAPSED,
+          Math.min(SNAP_EXPANDED, lastPanelHeight.current - gs.dy)
+        );
+        panelHeight.setValue(newH);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const currentH = lastPanelHeight.current - gs.dy;
+        const snapPoints = [SNAP_COLLAPSED, SNAP_HALF, SNAP_EXPANDED];
+        let target: number;
+        if (gs.vy < -0.5) {
+          target = snapPoints.find((s) => s > currentH) ?? SNAP_EXPANDED;
+        } else if (gs.vy > 0.5) {
+          const reversed = [...snapPoints].reverse();
+          target = reversed.find((s) => s < currentH) ?? SNAP_COLLAPSED;
+        } else {
+          target = snapPoints.reduce((prev, curr) =>
+            Math.abs(curr - currentH) < Math.abs(prev - currentH) ? curr : prev
+          );
+        }
+        Animated.spring(panelHeight, {
+          toValue: target,
+          useNativeDriver: false,
+          bounciness: 3,
+          speed: 14,
+        }).start(() => {
+          lastPanelHeight.current = target;
+        });
+      },
+    })
+  ).current;
 
   const vehicle = user?.vehicles.find((v) => v.id === trip?.vehicleId);
   const isSaved = trip ? savedTrips.some((t) => t.id === trip.id) : false;
@@ -189,7 +240,8 @@ export default function RouteScreen() {
       </TouchableOpacity>
 
       {/* Trip summary panel */}
-      <View style={styles.panel}>
+      <Animated.View style={[styles.panel, { height: panelHeight }]}>
+        <View {...panResponder.panHandlers}>
         <View style={styles.panelHandle} />
 
         {/* Panel header with save button */}
@@ -261,6 +313,7 @@ export default function RouteScreen() {
             </TouchableOpacity>
           )}
         </View>
+        </View>
 
         <ScrollView style={styles.stopsList} showsVerticalScrollIndicator={false}>
           {trip.stops.length === 0 && (
@@ -287,7 +340,7 @@ export default function RouteScreen() {
             />
           ))}
         </ScrollView>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -384,7 +437,7 @@ function makeStyles(colors: ColorScheme) {
     },
     errorText: { color: colors.text, fontSize: 16 },
     backLink: { color: colors.primary, marginTop: 12, fontSize: 15 },
-    map: { height: SCREEN_HEIGHT * 0.42, width: '100%' },
+    map: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     backBtn: {
       position: 'absolute',
       top: 52,
@@ -398,13 +451,21 @@ function makeStyles(colors: ColorScheme) {
     },
     backBtnText: { color: colors.text, fontWeight: '600', fontSize: 14 },
     panel: {
-      flex: 1,
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
       backgroundColor: colors.background,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      marginTop: -20,
       paddingHorizontal: 20,
       paddingTop: 12,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      elevation: 20,
     },
     panelHandle: {
       width: 40,

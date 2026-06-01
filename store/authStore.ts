@@ -15,6 +15,7 @@ interface AuthState {
   setUser: (user: User) => void;
   logout: () => Promise<void>;
   addVehicle: (vehicle: Vehicle) => void;
+  removeVehicle: (vehicleId: string) => void;
   setDefaultVehicle: (vehicleId: string) => void;
   loadFromStorage: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
@@ -96,6 +97,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       vehicles: [...user.vehicles, vehicle],
       defaultVehicleId: user.defaultVehicleId ?? vehicle.id,
     };
+    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    set({ user: updated });
+  },
+
+  removeVehicle: async (vehicleId) => {
+    const { user } = get();
+    if (!user) return;
+    const vehicles = user.vehicles.filter((v) => v.id !== vehicleId);
+    const defaultVehicleId =
+      user.defaultVehicleId === vehicleId
+        ? (vehicles[0]?.id ?? undefined)
+        : user.defaultVehicleId;
+    const updated: User = { ...user, vehicles, defaultVehicleId };
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
     set({ user: updated });
   },
