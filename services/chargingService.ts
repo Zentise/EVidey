@@ -1,33 +1,25 @@
 import axios from 'axios';
 import type { ChargingStation, ConnectorType, Coordinates, Amenity } from '../types';
 import {
-  OPEN_CHARGE_MAP_BASE_URL,
-  API_KEYS,
   AMENITY_SEARCH_RADIUS_METERS,
+  edgeFunctionHeaders,
+  edgeFunctionUrl,
 } from '../constants/config';
 
 /**
- * Fetch charging stations within a bounding box / radius from Open Charge Map.
- * Docs: https://openchargemap.org/site/develop/api
+ * Fetch charging stations via the Supabase Edge Function proxy.
+ * The Open Charge Map API key lives server-side in Supabase secrets.
  */
 export async function fetchChargingStations(
   center: Coordinates,
   radiusKm: number,
   connectorFilter?: ConnectorType[]
 ): Promise<ChargingStation[]> {
-  const params: Record<string, unknown> = {
-    output: 'json',
-    latitude: center.latitude,
-    longitude: center.longitude,
-    distance: radiusKm,
-    distanceunit: 'km',
-    maxresults: 50,
-    compact: true,
-    verbose: false,
-    key: API_KEYS.OPEN_CHARGE_MAP,
-  };
-
-  const { data } = await axios.get(`${OPEN_CHARGE_MAP_BASE_URL}/poi`, { params });
+  const { data } = await axios.post(
+    edgeFunctionUrl('charging-stations'),
+    { latitude: center.latitude, longitude: center.longitude, radiusKm },
+    { headers: edgeFunctionHeaders() }
+  );
 
   return (data as any[]).map((item) => ({
     id: String(item.ID),
@@ -50,8 +42,8 @@ export async function fetchChargingStations(
 }
 
 /**
- * Fetch nearby amenities (food, cafes, washrooms, etc.) using Google Places.
- * Lodging is searched at a wider radius since hotels are rarely within 500m.
+ * Fetch nearby amenities via the Supabase Edge Function proxy.
+ * All Google Places calls are consolidated server-side — no key in the app.
  */
 export async function fetchAmenitiesNearStation(
   coords: Coordinates
@@ -64,97 +56,39 @@ export async function fetchAmenitiesNearStation(
     'pharmacy',
   ];
 
-  const results: Amenity[] = [];
-
-  // Regular nearby amenities (500m)
-  for (const type of nearbyTypes) {
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json`;
-    const params = {
-      location: `${coords.latitude},${coords.longitude}`,
+  const { data } = await axios.post(
+    edgeFunctionUrl('nearby-places'),
+    {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
       radius: AMENITY_SEARCH_RADIUS_METERS,
-      type,
-      key: API_KEYS.GOOGLE_MAPS,
-    };
+      types: nearbyTypes,
+      lodgingRadius: 3000,
+    },
+    { headers: edgeFunctionHeaders() }
+  );
 
-    try {
-      const { data } = await axios.get(url, { params });
-      const places = (data.results ?? []).slice(0, 3);
-      for (const place of places) {
-        const lat: number = place.geometry.location.lat;
-        const lng: number = place.geometry.location.lng;
-        const dist = haversineMeters(coords, { latitude: lat, longitude: lng });
-
-        results.push({
-          id: place.place_id,
-          name: place.name,
-          category: googleTypeToCategory(type),
-          coordinates: { latitude: lat, longitude: lng },
-          distanceMeters: dist,
-          rating: place.rating,
-          isOpen: place.opening_hours?.open_now,
-          address: place.vicinity,
-        });
-      }
-    } catch {
-      // Silently continue if one category fails
-    }
-  }
-
-  // Lodging searched at wider 3km radius — hotels near highways are rarely within 500m
-  try {
-    const { data } = await axios.get(
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json`,
-      {
-        params: {
-          location: `${coords.latitude},${coords.longitude}`,
-          radius: 3000,
-          type: 'lodging',
-          rankby: 'prominence',
-          key: API_KEYS.GOOGLE_MAPS,
-        },
-      }
-    );
-    const places = (data.results ?? []).slice(0, 5);
-    for (const place of places) {
-      const lat: number = place.geometry.location.lat;
-      const lng: number = place.geometry.location.lng;
-      const dist = haversineMeters(coords, { latitude: lat, longitude: lng });
-      results.push({
-        id: place.place_id,
-        name: place.name,
-        category: 'stay',
-        coordinates: { latitude: lat, longitude: lng },
-        distanceMeters: dist,
-        rating: place.rating,
-        isOpen: place.opening_hours?.open_now,
-        address: place.vicinity,
-      });
-    }
-  } catch {
-    // Silently continue
-  }
-
-  return results;
+  return ((data as any).amenities ?? []).map((place: any) => ({
+    ...place,
+    category: googleTypeToCategory(place.category),
+    distanceMeters: haversineMeters(coords, place.coordinates),
+  })) as Amenity[];
 }
 
 /**
- * Refresh operational status for a list of station IDs.
- * OCM returns the same POI objects — we extract the StatusType.IsOperational flag.
+ * Refresh operational status for a list of station IDs via Edge Function proxy.
  * Returns a map of stationId → isOperational.
  */
 export async function refreshStationStatuses(
   stationIds: string[]
 ): Promise<Record<string, boolean>> {
   if (stationIds.length === 0) return {};
-  const params: Record<string, unknown> = {
-    output: 'json',
-    id: stationIds.join(','),
-    compact: true,
-    verbose: false,
-    key: API_KEYS.OPEN_CHARGE_MAP,
-  };
   try {
-    const { data } = await axios.get(`${OPEN_CHARGE_MAP_BASE_URL}/poi`, { params });
+    const { data } = await axios.post(
+      edgeFunctionUrl('charging-stations'),
+      { stationIds },
+      { headers: edgeFunctionHeaders() }
+    );
     const result: Record<string, boolean> = {};
     for (const item of data as any[]) {
       result[String(item.ID)] = item.StatusType?.IsOperational ?? true;

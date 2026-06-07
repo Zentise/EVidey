@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as Location from 'expo-location';
 import type { Coordinates } from '../types';
-import { API_KEYS } from '../constants/config';
+import { edgeFunctionHeaders, edgeFunctionUrl } from '../constants/config';
 
 export interface PlaceSuggestion {
   placeId: string;
@@ -42,7 +42,7 @@ export async function getCurrentLocation(): Promise<Coordinates & { label: strin
 }
 
 /**
- * Autocomplete place suggestions from Google Places API.
+ * Autocomplete place suggestions via Supabase Edge Function proxy.
  */
 export async function getPlaceSuggestions(
   input: string,
@@ -50,20 +50,15 @@ export async function getPlaceSuggestions(
 ): Promise<PlaceSuggestion[]> {
   if (input.trim().length < 2) return [];
 
-  const params: Record<string, string> = {
-    input: input.trim(),
-    key: API_KEYS.GOOGLE_MAPS,
-    language: 'en',
-  };
-
-  if (locationBias) {
-    params.location = `${locationBias.latitude},${locationBias.longitude}`;
-    params.radius = '200000'; // 200km bias radius for better local relevance
-  }
-
-  const { data } = await axios.get(
-    'https://maps.googleapis.com/maps/api/place/autocomplete/json',
-    { params }
+  const { data } = await axios.post(
+    edgeFunctionUrl('place-search'),
+    {
+      operation: 'autocomplete',
+      input: input.trim(),
+      latitude: locationBias?.latitude,
+      longitude: locationBias?.longitude,
+    },
+    { headers: edgeFunctionHeaders() }
   );
 
   if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
@@ -80,20 +75,15 @@ export async function getPlaceSuggestions(
 }
 
 /**
- * Resolve a Google Place ID to coordinates.
+ * Resolve a Google Place ID to coordinates via Supabase Edge Function proxy.
  */
 export async function getPlaceCoordinates(
   placeId: string
 ): Promise<Coordinates & { label: string }> {
-  const { data } = await axios.get(
-    'https://maps.googleapis.com/maps/api/place/details/json',
-    {
-      params: {
-        place_id: placeId,
-        fields: 'geometry,name,formatted_address',
-        key: API_KEYS.GOOGLE_MAPS,
-      },
-    }
+  const { data } = await axios.post(
+    edgeFunctionUrl('place-search'),
+    { operation: 'details', placeId },
+    { headers: edgeFunctionHeaders() }
   );
 
   const result = data.result;
@@ -105,20 +95,15 @@ export async function getPlaceCoordinates(
 }
 
 /**
- * Fallback: geocode a plain text address string to coordinates.
- * Used when autocomplete isn't available.
+ * Fallback: geocode a plain text address string to coordinates via Supabase Edge Function proxy.
  */
 export async function geocodeAddress(
   address: string
 ): Promise<Coordinates & { label: string }> {
-  const { data } = await axios.get(
-    'https://maps.googleapis.com/maps/api/geocode/json',
-    {
-      params: {
-        address,
-        key: API_KEYS.GOOGLE_MAPS,
-      },
-    }
+  const { data } = await axios.post(
+    edgeFunctionUrl('place-search'),
+    { operation: 'geocode', address },
+    { headers: edgeFunctionHeaders() }
   );
 
   if (data.status !== 'OK' || !data.results?.length) {

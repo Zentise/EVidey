@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { Coordinates, RouteStop, TripPlan, Vehicle, ChargingStation } from '../types';
-import { API_KEYS, MIN_ARRIVAL_BATTERY_PERCENT } from '../constants/config';
+import { MIN_ARRIVAL_BATTERY_PERCENT, edgeFunctionHeaders, edgeFunctionUrl } from '../constants/config';
 import { fetchChargingStations, fetchAmenitiesNearStation } from './chargingService';
 
 /**
@@ -15,9 +15,9 @@ export async function planTrip(
   destination: Coordinates & { label: string },
   vehicle: Vehicle
 ): Promise<TripPlan> {
-  // --- Step 1: Get route from Google Routes API ---
+  // --- Step 1: Get route from Google Routes API (via Supabase Edge Function) ---
   const routeRes = await axios.post(
-    'https://routes.googleapis.com/directions/v2:computeRoutes',
+    edgeFunctionUrl('compute-routes'),
     {
       origin: {
         location: {
@@ -36,13 +36,7 @@ export async function planTrip(
       routingPreference: 'TRAFFIC_AWARE',
       polylineQuality: 'HIGH_QUALITY',
     },
-    {
-      headers: {
-        'X-Goog-Api-Key': API_KEYS.GOOGLE_MAPS,
-        'X-Goog-FieldMask':
-          'routes.duration,routes.distanceMeters,routes.polyline,routes.legs',
-      },
-    }
+    { headers: edgeFunctionHeaders() }
   );
 
   const route = routeRes.data.routes[0];
