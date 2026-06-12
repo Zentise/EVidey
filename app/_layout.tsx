@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeStore } from '../store/themeStore';
 import { useTripStore } from '../store/tripStore';
 import { requestNotificationPermissions } from '../services/notificationService';
+import { configureGoogleSignIn } from '../services/googleAuthService';
 
 function parseDeepLink(url: string | null) {
   if (!url) return null;
@@ -37,6 +38,7 @@ export default function RootLayout() {
   const setDestination = useTripStore((s) => s.setDestination);
   const setSelectedVehicle = useTripStore((s) => s.setSelectedVehicle);
   const isDark = useThemeStore((s) => s.isDark);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   function handleDeepLink(url: string | null) {
     const params = parseDeepLink(url);
@@ -50,8 +52,8 @@ export default function RootLayout() {
   useEffect(() => {
     loadFromStorage();
     loadTheme();
-    loadSavedTrips();
     loadCachedTrip();
+    configureGoogleSignIn();
     requestNotificationPermissions();
 
     // Handle cold-start deep link
@@ -61,6 +63,13 @@ export default function RootLayout() {
     const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
     return () => sub.remove();
   }, []);
+
+  // Load saved trips from Firestore once the user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadSavedTrips();
+    }
+  }, [isAuthenticated]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

@@ -6,7 +6,14 @@ import {
   firebaseSignOut,
   firebaseOnAuthChange,
   isFirebaseConfigured,
+  firestoreGetUser,
+  firestoreSaveUser,
+  firestoreUpdateUser,
+  GoogleAuthProvider,
+  signInWithCredential,
+  auth,
 } from '../services/firebaseService';
+import { signOutFromGoogle } from '../services/googleAuthService';
 
 interface AuthState {
   user: User | null;
@@ -19,6 +26,7 @@ interface AuthState {
   setDefaultVehicle: (vehicleId: string) => void;
   loadFromStorage: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   updateUser: (partial: Partial<User>) => Promise<void>;
 }
 
@@ -31,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setUser: async (user) => {
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+    await firestoreSaveUser(user);
     set({ user, isAuthenticated: true, isLoading: false });
   },
 
@@ -38,21 +47,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (isFirebaseConfigured) {
       const cred = await firebaseSignIn(email, password);
       const fbUser = cred.user;
-      const user: User = {
-        id: fbUser.uid,
-        name: fbUser.displayName ?? email.split('@')[0],
-        email: fbUser.email ?? email,
-        photoUrl: fbUser.photoURL ?? undefined,
-        vehicles: [],
-      };
-      // Merge existing vehicles from local storage (in case user had vehicles saved)
-      const raw = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-      if (raw) {
-        const cached: User = JSON.parse(raw);
-        if (cached.id === user.id) {
-          user.vehicles = cached.vehicles;
-          user.defaultVehicleId = cached.defaultVehicleId;
-        }
+
+      // Load profile from Firestore (source of truth)
+      let user = await firestoreGetUser(fbUser.uid);
+      if (!user) {
+        // First login — create profile
+        user = {
+          id: fbUser.uid,
+          name: fbUser.displayName ?? email.split('@')[0],
+          email: fbUser.email ?? email,
+          photoUrl: fbUser.photoURL ?? undefined,
+          vehicles: [],
+        };
+        await firestoreSaveUser(user);
       }
       await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
       set({ user, isAuthenticated: true, isLoading: false });
@@ -75,9 +82,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  loginWithGoogle: async (idToken: string) => {
+    if (!isFirebaseConfigured) throw new Error('Firebase not configured');
+    const credential = GoogleAuthProvider.credential(idToken);
+    const cred = await signInWithCredential(auth, credential);
+    const fbUser = cred.user;
+
+    // Load existing profile or create a new one
+    let user = await firestoreGetUser(fbUser.uid);
+    if (!user) {
+      user = {
+        id: fbUser.uid,
+        name: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'User',
+        email: fbUser.email ?? '',
+        photoUrl: fbUser.photoURL ?? undefined,
+        vehicles: [],
+      };
+      await firestoreSaveUser(user);
+    }
+    await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+    set({ user, isAuthenticated: true, isLoading: false });
+  },
+
   logout: async () => {
     await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+    await AsyncStorage.removeItem('evidey_saved_trips');
+    await AsyncStorage.removeItem('evidey_cached_trip');
     if (isFirebaseConfigured) await firebaseSignOut();
+    await signOutFromGoogle();
+    // Clear trip store state so another user's data is never shown
+    const { useTripStore } = require('./tripStore');
+    useTripStore.getState().resetPlanning();
+    useTripStore.setState({ savedTrips: [], cachedTrip: null });
     set({ user: null, isAuthenticated: false });
   },
 
@@ -86,6 +122,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) return;
     const updated = { ...user, ...partial };
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    await firestoreUpdateUser(user.id, partial);
     set({ user: updated });
   },
 
@@ -98,6 +135,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       defaultVehicleId: user.defaultVehicleId ?? vehicle.id,
     };
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    await firestoreSaveUser(updated);
     set({ user: updated });
   },
 
@@ -111,6 +149,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         : user.defaultVehicleId;
     const updated: User = { ...user, vehicles, defaultVehicleId };
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    await firestoreSaveUser(updated);
     set({ user: updated });
   },
 
@@ -119,32 +158,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user) return;
     const updated: User = { ...user, defaultVehicleId: vehicleId };
     await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+    await firestoreUpdateUser(user.id, { defaultVehicleId: vehicleId });
     set({ user: updated });
   },
 
   loadFromStorage: async () => {
     try {
-      // Listen for Firebase auth state changes
       if (isFirebaseConfigured) {
         const unsubscribe = firebaseOnAuthChange(async (fbUser) => {
           unsubscribe();
           if (fbUser) {
-            const raw = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-            if (raw) {
-              const cached: User = JSON.parse(raw);
-              if (cached.id === fbUser.uid) {
-                set({ user: cached, isAuthenticated: true, isLoading: false });
-                return;
-              }
+            // Try Firestore first (cloud source of truth)
+            let user = await firestoreGetUser(fbUser.uid);
+            if (!user) {
+              // Fall back to local cache if Firestore is empty (e.g. offline)
+              const raw = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+              user = raw ? JSON.parse(raw) : null;
+            }
+            if (user) {
+              await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+              set({ user, isAuthenticated: true, isLoading: false });
+              return;
             }
           }
-          // Fall through to AsyncStorage check
-          const raw = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-          if (raw) {
-            set({ user: JSON.parse(raw), isAuthenticated: true, isLoading: false });
-          } else {
-            set({ isLoading: false });
-          }
+          set({ isLoading: false });
         });
         return;
       }

@@ -26,6 +26,7 @@ module.exports = {
       monochromeImage: './assets/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    googleServicesFile: './google-services.json',
     config: {
       googleMaps: {
         // This embeds the key into the native AndroidManifest.xml
@@ -39,6 +40,7 @@ module.exports = {
   plugins: [
     'expo-router',
     'expo-status-bar',
+    '@react-native-google-signin/google-signin',
     [
       'react-native-maps',
       {

@@ -235,8 +235,8 @@ export default function RouteScreen() {
       </MapView>
 
       {/* Back button */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Text style={styles.backBtnText}>← Back</Text>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.85}>
+        <Text style={styles.backBtnText}>←</Text>
       </TouchableOpacity>
 
       {/* Trip summary panel */}
@@ -246,18 +246,19 @@ export default function RouteScreen() {
 
         {/* Panel header with save button */}
         <View style={styles.panelHeader}>
-          <View>
-            <Text style={styles.routeLabel} numberOfLines={1}>
-              {trip.origin.label.split(',')[0]} → {trip.destination.label.split(',')[0]}
-            </Text>
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={styles.routeOrigin} numberOfLines={1}>{trip.origin.label.split(',')[0]}</Text>
+            <Text style={styles.routeArrow}>↓</Text>
+            <Text style={styles.routeDest} numberOfLines={1}>{trip.destination.label.split(',')[0]}</Text>
           </View>
           <TouchableOpacity
             style={[styles.saveBtn, (isSaved || justSaved) && styles.saveBtnActive]}
             onPress={handleSaveTrip}
             disabled={isSaved}
+            activeOpacity={0.85}
           >
             <Text style={styles.saveBtnText}>
-              {justSaved ? '✓ Saved!' : isSaved ? '🔖 Saved' : '🔖 Save'}
+              {justSaved ? '✓ Saved' : isSaved ? '🔖 Saved' : '🔖 Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -285,10 +286,10 @@ export default function RouteScreen() {
 
         {/* Start Trip button */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.startBtn, { flex: 1 }]} onPress={handleStartTrip}>
+          <TouchableOpacity style={[styles.startBtn, { flex: 1 }]} onPress={handleStartTrip} activeOpacity={0.85}>
             <Text style={styles.startBtnText}>🗺️  Start in Google Maps</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
             <Text style={styles.shareBtnText}>↗</Text>
           </TouchableOpacity>
         </View>
@@ -346,82 +347,52 @@ export default function RouteScreen() {
 }
 
 function StopCard({
-  stop,
-  index,
-  colors,
-  liveStatus,
-  onPress,
+  stop, index, colors, liveStatus, onPress,
 }: {
-  stop: RouteStop;
-  index: number;
-  colors: ColorScheme;
-  liveStatus?: boolean;
-  onPress: () => void;
+  stop: RouteStop; index: number; colors: ColorScheme;
+  liveStatus?: boolean; onPress: () => void;
 }) {
-  const statusColor =
-    liveStatus === undefined
-      ? colors.textMuted
-      : liveStatus
-      ? colors.success
-      : colors.error;
-  const statusText =
-    liveStatus === undefined ? '' : liveStatus ? '● Live: Available' : '● Live: Offline';
+  const statusColor = liveStatus === undefined ? colors.textMuted : liveStatus ? colors.success : colors.error;
+  const statusText = liveStatus === undefined ? '' : liveStatus ? '● Available' : '● Offline';
   return (
     <TouchableOpacity
       style={{
         backgroundColor: colors.surface,
-        borderRadius: 14,
-        padding: 14,
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
+        borderRadius: 18, padding: 16,
+        flexDirection: 'row', alignItems: 'center',
+        marginBottom: 10, borderWidth: 1, borderColor: colors.border,
+        shadowColor: colors.cardShadow,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
       }}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
-      <View
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 16,
-          backgroundColor: colors.primary,
-          justifyContent: 'center',
-          alignItems: 'center',
-          marginRight: 12,
-        }}
-      >
-        <Text style={{ color: colors.primaryForeground, fontWeight: '800', fontSize: 14 }}>
-          {index}
-        </Text>
+      <View style={{
+        width: 36, height: 36, borderRadius: 12,
+        backgroundColor: colors.primary,
+        justifyContent: 'center', alignItems: 'center', marginRight: 14,
+      }}>
+        <Text style={{ color: colors.primaryForeground, fontWeight: '800', fontSize: 15 }}>{index}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <Text
-          style={{ fontSize: 15, fontWeight: '700', color: colors.text }}
-          numberOfLines={1}
-        >
+        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text }} numberOfLines={1}>
           {stop.station.name}
         </Text>
         <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
-          {stop.distanceFromPrevKm} km · {stop.arrivalBatteryPercent}% arrival →{' '}
-          {stop.departureBatteryPercent}%
+          {stop.distanceFromPrevKm} km · {stop.arrivalBatteryPercent}% → {stop.departureBatteryPercent}%
         </Text>
-        <Text style={{ fontSize: 12, color: colors.primary, marginTop: 2, fontWeight: '600' }}>
-          ~{stop.estimatedChargeMinutes} min charge · {stop.station.powerKw} kW
+        <Text style={{ fontSize: 12, color: colors.primary, marginTop: 2, fontWeight: '700' }}>
+          ~{stop.estimatedChargeMinutes} min · {stop.station.powerKw} kW
         </Text>
-        {statusText ? (
-          <Text style={{ fontSize: 11, color: statusColor, marginTop: 4, fontWeight: '600' }}>
-            {statusText}
-          </Text>
-        ) : null}
+        {statusText ? <Text style={{ fontSize: 11, color: statusColor, marginTop: 3, fontWeight: '600' }}>{statusText}</Text> : null}
         {stop.station.amenities.length > 0 && (
-          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 4 }}>
-            📍 {stop.station.amenities.length} nearby amenities
+          <Text style={{ fontSize: 11, color: colors.textMuted, marginTop: 3 }}>
+            📍 {stop.station.amenities.length} nearby
           </Text>
         )}
       </View>
-      <Text style={{ color: colors.textMuted, fontSize: 22, marginLeft: 8 }}>›</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 20 }}>›</Text>
     </TouchableOpacity>
   );
 }
@@ -429,140 +400,83 @@ function StopCard({
 function makeStyles(colors: ColorScheme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: colors.background,
-    },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
     errorText: { color: colors.text, fontSize: 16 },
     backLink: { color: colors.primary, marginTop: 12, fontSize: 15 },
     map: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
     backBtn: {
-      position: 'absolute',
-      top: 52,
-      left: 20,
+      position: 'absolute', top: 52, left: 16,
       backgroundColor: colors.surface,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
+      width: 40, height: 40, borderRadius: 20,
+      justifyContent: 'center', alignItems: 'center',
+      borderWidth: 1, borderColor: colors.border,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.12, shadowRadius: 6, elevation: 4,
     },
-    backBtnText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+    backBtnText: { color: colors.text, fontWeight: '700', fontSize: 18 },
     panel: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: colors.background,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      paddingHorizontal: 20,
-      paddingTop: 12,
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 28, borderTopRightRadius: 28,
+      paddingHorizontal: 20, paddingTop: 12,
       overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.15,
-      shadowRadius: 12,
-      elevation: 20,
+      shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
+      shadowOpacity: 0.15, shadowRadius: 20, elevation: 24,
     },
     panelHandle: {
-      width: 40,
-      height: 4,
-      backgroundColor: colors.border,
-      borderRadius: 2,
-      alignSelf: 'center',
-      marginBottom: 14,
+      width: 36, height: 4, backgroundColor: colors.border,
+      borderRadius: 2, alignSelf: 'center', marginBottom: 16,
     },
     panelHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 14,
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: 14,
     },
-    routeLabel: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
-      maxWidth: 200,
-    },
+    routeOrigin: { fontSize: 14, fontWeight: '700', color: colors.text },
+    routeArrow: { fontSize: 12, color: colors.textMuted, marginVertical: 1 },
+    routeDest: { fontSize: 14, fontWeight: '700', color: colors.textSecondary },
     saveBtn: {
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 20,
-      borderWidth: 1.5,
-      borderColor: colors.primary,
+      paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+      backgroundColor: colors.primaryLight, borderWidth: 1.5, borderColor: colors.primary,
     },
-    saveBtnActive: {
-      backgroundColor: `${colors.primary}22`,
-    },
+    saveBtnActive: { backgroundColor: colors.primary },
     saveBtnText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
     summary: {
-      flexDirection: 'row',
-      backgroundColor: colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      marginBottom: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
+      flexDirection: 'row', backgroundColor: colors.background,
+      borderRadius: 18, padding: 18, marginBottom: 12,
+      borderWidth: 1, borderColor: colors.border,
     },
     summaryItem: { flex: 1, alignItems: 'center' },
-    summaryValue: { fontSize: 20, fontWeight: '800', color: colors.primary },
+    summaryValue: { fontSize: 22, fontWeight: '800', color: colors.primary },
     summaryLabel: { fontSize: 11, color: colors.textSecondary, marginTop: 2, fontWeight: '600' },
     divider: { width: 1, backgroundColor: colors.border, marginVertical: 4 },
     startBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: 'center',
-      marginBottom: 8,
+      backgroundColor: colors.primary, borderRadius: 16,
+      paddingVertical: 15, alignItems: 'center',
+      shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25, shadowRadius: 10, elevation: 4,
     },
-    startBtnText: {
-      color: colors.primaryForeground,
-      fontWeight: '700',
-      fontSize: 15,
-    },
-    actionRow: { flexDirection: 'row', gap: 8, marginBottom: 8, alignItems: 'center' },
+    startBtnText: { color: colors.primaryForeground, fontWeight: '700', fontSize: 15 },
+    actionRow: { flexDirection: 'row', gap: 8, marginBottom: 10, alignItems: 'center' },
     shareBtn: {
-      backgroundColor: colors.surface,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: 50,
+      backgroundColor: colors.background, borderRadius: 16,
+      paddingVertical: 15, alignItems: 'center', justifyContent: 'center',
+      width: 50, borderWidth: 1, borderColor: colors.border,
     },
     shareBtnText: { color: colors.primary, fontWeight: '700', fontSize: 18 },
     alertsBtn: {
-      borderWidth: 1.5,
-      borderColor: colors.primary,
-      borderRadius: 14,
-      padding: 12,
-      alignItems: 'center',
-      marginBottom: 12,
+      borderWidth: 1.5, borderColor: colors.border, borderRadius: 14,
+      padding: 12, alignItems: 'center', marginBottom: 12,
     },
-    alertsBtnActive: { backgroundColor: `${colors.primary}22` },
-    alertsBtnText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
+    alertsBtnActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+    alertsBtnText: { color: colors.textSecondary, fontWeight: '600', fontSize: 13 },
     alertsBtnTextActive: { color: colors.primary },
     stopsHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 8,
+      flexDirection: 'row', justifyContent: 'space-between',
+      alignItems: 'center', marginBottom: 8,
     },
-    stopsHeading: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
+    stopsHeading: { fontSize: 16, fontWeight: '700', color: colors.text },
     refreshBtn: { fontSize: 13, color: colors.primary, fontWeight: '600' },
     stopsList: { flex: 1 },
-    noStops: {
-      color: colors.textSecondary,
-      fontSize: 14,
-      textAlign: 'center',
-      marginTop: 20,
-      lineHeight: 22,
-    },
+    noStops: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 20, lineHeight: 22 },
   });
 }
